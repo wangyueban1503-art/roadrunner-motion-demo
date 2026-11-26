@@ -1,4 +1,4 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Roadrunner · Robot Motion Studio</title><link rel="stylesheet" href="studio.css">
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Roadrunner · Robot Motion Studio</title><link rel="stylesheet" href="studio.css?v=20261126-click2">
 <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js","three/addons/":"./vendor/addons/"}}</script></head>
 <body><main>
 <header><div><div class="eyebrow">ROADRUNNER / WEEK 02</div><h1>Robot Motion Studio</h1><p>轮腿机器人 · 平地移动交互演示</p></div><div class="badge"><i></i><span id="status" role="status">加载模型中</span></div></header>
@@ -8,11 +8,11 @@
 <section class="panel"><div class="eyebrow">02 / ACTION</div><h2>移动到目标</h2><p>点击网格或输入坐标。选择横向滑行后，髋部先旋转，再侧身滑行。双髋分别转向，支持侧身沿弯道到达目标。</p>
 <label class="mode-label" for="mode">运动模式</label>
 <select id="mode"><option value="forward">常规轮腿移动</option><option value="lateral">髋部旋转 · 横向滑行</option></select>
-<form id="target"><div class="coords"><label>X · 米<input id="x" type="number" min="-1.35" max="1.35" step="0.01" value="0.45" required></label><label>Z · 米<input id="z" type="number" min="-1.35" max="1.35" step="0.01" value="0.65" required></label></div>
+<form id="target"><div class="coords"><label>X · 米<input id="x" type="number" min="-3" max="3" step="0.01" value="0.45" required></label><label>Z · 米<input id="z" type="number" min="-3" max="3" step="0.01" value="0.65" required></label></div>
 <button class="primary" id="go" disabled>生成并播放</button></form><button class="wide" id="reset" disabled>复位到原点</button></section>
 <section class="panel"><div class="eyebrow">03 / TELEMETRY</div><h2>运动反馈</h2>
 <dl><div><dt>当前位置</dt><dd id="pos">—</dd></div><div><dt>机身航向</dt><dd id="yaw">—</dd></div><div><dt>左 / 右轮累计转角</dt><dd id="wheels">—</dd></div><div><dt>左 / 右膝角</dt><dd id="knees">—</dd></div><div><dt>左 / 右髋部扭转</dt><dd id="hip-yaw">—</dd></div><div><dt>机身侧倾</dt><dd id="bank">—</dd></div><div><dt>地面状态</dt><dd id="contact">—</dd></div></dl>
 <p class="note">横滑采用髋部旋转轴的演示近似，双轮贴地。可拖动时间轴观察转髋过程。</p></section>
 </aside></div>
 <footer><button id="play" disabled>播放</button><label class="sr" for="time">播放进度</label><input type="range" id="time" min="0" max="1" step="0.001" value="0" disabled><output id="clock">0.00 / 0.00 s</output><span class="timeline">04 / TIMELINE</span></footer>
-</main><script type="module" src="studio.js"></script></body></html>
+</main><script type="module" src="studio.js?v=20261126-click2"></script></body></html>

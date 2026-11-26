@@ -2,11 +2,11 @@ import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-import { makeModeMotion, makeRig } from './motion.js';
+import { makeModeMotion, makeRig } from './motion.js?v=20261126-click2';
 
 const $ = (id) => document.getElementById(id);
 const host = $('scene'), status = $('status');
-const LIMIT = 1.35;
+const LIMIT = 3;
 const zero = () => ({x:0,z:0,yaw:0,left:0,right:0,hipYaw:0});
 const clamp = (v,a,b) => Math.min(b, Math.max(a,v));
 const angle = (v) => Math.atan2(Math.sin(v),Math.cos(v));
@@ -122,7 +122,7 @@ function init(){
   const key=new T.DirectionalLight(0xfff5e7,2);key.position.set(2,4,1);scene.add(key);
   const base=new T.Mesh(new T.PlaneGeometry(24,24),new T.MeshBasicMaterial({color:0xdce5eb}));
   base.rotation.x=-Math.PI/2;base.position.y=-.004;scene.add(base);
-  const grid=new T.GridHelper(2.7,18,0x8599a9,0xa3b5c3);scene.add(grid);
+  const grid=new T.GridHelper(6,40,0x8599a9,0xa3b5c3);scene.add(grid);
   const origin=new T.Mesh(new T.RingGeometry(.031,.036,36),new T.MeshBasicMaterial({color:0x748c9d}));
   origin.rotation.x=-Math.PI/2;origin.position.y=.001;scene.add(origin);
   marker=new T.Group();
@@ -136,18 +136,21 @@ function init(){
   setView();resize();
 
   let down=null;
-  host.addEventListener('pointerdown',e=>{down=e.isPrimary&&e.button===0?{x:e.clientX,y:e.clientY,moved:false,id:e.pointerId}:null;});
-  host.addEventListener('pointermove',e=>{if(down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>5)down.moved=true;});
+  host.addEventListener('pointerdown',e=>{down=e.isPrimary&&e.button===0?{x:e.clientX,y:e.clientY,moved:false,id:e.pointerId}:null;}, {capture:true});
+  host.addEventListener('pointermove',e=>{if(down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>8)down.moved=true;});
   host.addEventListener('pointercancel',()=>{down=null;});
   host.addEventListener('pointerup',e=>{
     const start=down;down=null;
-    if(!start||start.id!==e.pointerId||start.moved||Math.hypot(e.clientX-start.x,e.clientY-start.y)>5)return;
+    if(!start||start.id!==e.pointerId||start.moved||Math.hypot(e.clientX-start.x,e.clientY-start.y)>8)return;
     const b=host.getBoundingClientRect(), ndc=new T.Vector2((e.clientX-b.left)/b.width*2-1,1-(e.clientY-b.top)/b.height*2);
     ray.setFromCamera(ndc,camera);
     const point=ray.ray.intersectPlane(floor,new T.Vector3());
-    if(point && Math.abs(point.x)<=LIMIT && Math.abs(point.z)<=LIMIT)
-      plan(Math.round(point.x*100)/100,Math.round(point.z*100)/100);
-  });
+    if (!point) {
+      status.textContent = '请点击地面';
+      return;
+    }
+    plan(Math.round(point.x*100)/100, Math.round(point.z*100)/100);
+  }, {capture:true});
 }
 function fail(e){
   console.error(e);status.textContent='预览无法启动';
