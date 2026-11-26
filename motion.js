@@ -57,50 +57,65 @@ export function makeArc(start, x, z) {
 
 export function makeModeMotion(start, x, z, mode) {
   const lateral = mode === 'lateral';
-  const targetYaw = lateral ? Math.PI / 2 : 0;
-  const fromYaw = start.hipYaw || 0;
-  const steeringTime = Math.abs(targetYaw - fromYaw) > .001 ? 1.4 : 0;
-  let travel;
-  if (lateral) {
-    const rightX = Math.cos(start.yaw), rightZ = -Math.sin(start.yaw);
-    const distance = (x - start.x) * rightX + (z - start.z) * rightZ;
-    if (Math.abs(distance) < .004 && !steeringTime) return null;
-    const duration = Math.max(1.4, Math.abs(distance) / .22);
-    const at = fraction => ({
-      x: start.x + rightX * distance * fraction,
-      z: start.z + rightZ * distance * fraction,
-      yaw: start.yaw,
-      left: start.left + distance * fraction / radius,
-      right: start.right + distance * fraction / radius,
-    });
-    travel = {
-      duration, direction: Math.sign(distance), at,
-      sample(time) {
-        const p = clamp(time / duration, 0, 1);
-        const engagement = Math.sin(Math.PI * p) ** 2;
-        return {...at(smooth(p)), stance: engagement, crouch: .008 * engagement};
-      },
+  // Plan in the wheels' travel frame, which is perpendicular to the torso in side mode.
+  const travelStart = {...start, yaw: start.yaw + (lateral ? Math.PI / 2 : 0)};
+  const arc = makeArc(travelStart, x, z);
+  if (!arc) return null;
+  const end = arc.at(1);
+  const turn = end.yaw - travelStart.yaw;
+  const chord = Math.hypot(x - start.x, z - start.z);
+  const length = Math.abs(turn) < 1e-8 ? chord : chord * turn / (2 * Math.sin(turn / 2));
+  const curvature = turn / length;
+  const signedCurvature = curvature * arc.direction;
+  const fromLeft = start.hipYawLeft ?? start.hipYaw ?? 0;
+  const fromRight = start.hipYawRight ?? start.hipYaw ?? 0;
+
+  // In the sideways stance the two hips sit fore/aft along the travel direction.
+  // Each wheel must steer along its own circular trajectory to allow body yaw.
+  const steering = side => lateral
+    ? Math.atan2(1, -signedCurvature * side * .082)
+    : 0;
+  const targetLeft = steering(-1), targetRight = steering(1);
+  const steeringTime = Math.max(Math.abs(targetLeft - fromLeft), Math.abs(targetRight - fromRight)) > .001
+    ? 1.4 : 0;
+  const at = fraction => {
+    const point = arc.at(fraction);
+    const distance = arc.direction * length * fraction;
+    return {
+      ...point,
+      yaw: point.yaw - (lateral ? Math.PI / 2 : 0),
+      left: lateral
+        ? start.left + distance * Math.hypot(1, signedCurvature * .082) / radius
+        : point.left,
+      right: lateral
+        ? start.right + distance * Math.hypot(1, signedCurvature * .082) / radius
+        : point.right,
     };
-  } else {
-    travel = makeArc(start, x, z);
-    if (!travel) return null;
-  }
+  };
   return {
-    duration: steeringTime + travel.duration,
-    direction: travel.direction,
-    at: travel.at,
+    duration: steeringTime + arc.duration,
+    direction: arc.direction,
+    at,
     sample(time) {
       if (time < steeringTime) {
-        const p = smooth(clamp(time / steeringTime, 0, 1));
-        return {...start, hipYaw: fromYaw + (targetYaw - fromYaw) * p,
-          bodyPitch: (start.bodyPitch || 0) * (1 - p),
-          bank: (start.bank || 0) * (1 - p),
-          crouch: (start.crouch || 0) * (1 - p),
-          stance: (start.stance || 0) * (1 - p),
-          phase: lateral ? '髋部转向横滑姿态' : '髋部回正'};
+        const fraction = smooth(clamp(time / steeringTime, 0, 1));
+        const left = fromLeft + (targetLeft - fromLeft) * fraction;
+        const right = fromRight + (targetRight - fromRight) * fraction;
+        return {...start, hipYaw: (left + right) / 2, hipYawLeft: left, hipYawRight: right,
+          bodyPitch: (start.bodyPitch || 0) * (1 - fraction),
+          bank: (start.bank || 0) * (1 - fraction),
+          crouch: (start.crouch || 0) * (1 - fraction),
+          stance: (start.stance || 0) * (1 - fraction),
+          phase: lateral ? '双髋协调转向' : '髋部回正'};
       }
-      return {...travel.sample(time - steeringTime), hipYaw: targetYaw,
-        lateral, phase: lateral ? '正在横向滑行' : '正在滚动'};
+      const p = clamp((time - steeringTime) / arc.duration, 0, 1);
+      const engagement = Math.sin(Math.PI * p) ** 2;
+      const point = lateral
+        ? {...at(smooth(p)), stance: engagement, crouch: .008 * engagement}
+        : arc.sample(time - steeringTime);
+      return {...point, hipYaw: (targetLeft + targetRight) / 2,
+        hipYawLeft: targetLeft, hipYawRight: targetRight,
+        lateral, phase: lateral ? '侧身滑行 · 双轮协调转弯' : '正在滚动'};
     },
   };
 }
@@ -171,7 +186,7 @@ export function makeRig(model, ground) {
     let error = 0;
     for (const leg of legs) {
       const {side, roll, hip, knee, wheel} = leg;
-      leg.yaw.rotation.y = p.hipYaw || 0;
+      leg.yaw.rotation.y = (side < 0 ? p.hipYawLeft : p.hipYawRight) ?? p.hipYaw ?? 0;
       roll.rotation.z = p.lateral || Math.abs(p.hipYaw || 0) > .001
         ? 0 : side * .075 * stance - .64 * bank;
       if (stance < .000001) {

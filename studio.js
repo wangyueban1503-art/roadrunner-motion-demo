@@ -40,7 +40,7 @@ function update(p,time,length,label){
   const joints = poseRig(posture,p);
   $('knees').textContent = deg(joints.kneeLeft)+' / '+deg(joints.kneeRight);
   $('bank').textContent = deg(joints.bank);
-  $('hip-yaw').textContent = deg(p.hipYaw || 0);
+  $('hip-yaw').textContent = deg(p.hipYawLeft ?? p.hipYaw ?? 0) + ' / ' + deg(p.hipYawRight ?? p.hipYaw ?? 0);
   $('pos').textContent=position(p.x,p.z);
   $('yaw').textContent=deg(angle(p.yaw));
   $('wheels').textContent=deg(p.left)+' / '+deg(p.right);
@@ -192,8 +192,9 @@ $('mode').addEventListener('change', () => {
   if (!robot) return;
   stop();
   const lateral = $('mode').value === 'lateral';
-  const dx = lateral ? Math.cos(pose.yaw) : Math.sin(pose.yaw);
-  const dz = lateral ? -Math.sin(pose.yaw) : Math.cos(pose.yaw);
+  const dx = lateral ? Math.cos(pose.yaw) + .45 * Math.sin(pose.yaw) : Math.sin(pose.yaw);
+  const dz = lateral ? -Math.sin(pose.yaw) + .45 * Math.cos(pose.yaw) : Math.cos(pose.yaw);
   const sign = Math.abs(pose.x + dx * .55) > LIMIT || Math.abs(pose.z + dz * .55) > LIMIT ? -1 : 1;
   plan(pose.x + sign * dx * .55, pose.z + sign * dz * .55);
 });
+
