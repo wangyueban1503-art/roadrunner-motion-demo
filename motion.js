@@ -7,6 +7,7 @@ const hipHeight = .248;
 const rad = Math.PI / 180;
 const xAxis = new Vector3(1, 0, 0);
 const zAxis = new Vector3(0, 0, 1);
+const yAxis = new Vector3(0, 1, 0);
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 const smooth = (p) => p ** 3 * (10 - 15 * p + 6 * p ** 2);
 
@@ -75,7 +76,7 @@ export function makeModeMotion(start, x, z, mode) {
   const steering = side => lateral
     ? Math.atan2(1, -signedCurvature * side * .082)
     : 0;
-  const targetLeft = steering(-1), targetRight = steering(1);
+  const targetLeft = steering(-1), targetRight = steering(1) - (lateral ? Math.PI : 0);
   const steeringTime = Math.max(Math.abs(targetLeft - fromLeft), Math.abs(targetRight - fromRight)) > .001
     ? 1.4 : 0;
   const at = fraction => {
@@ -88,7 +89,7 @@ export function makeModeMotion(start, x, z, mode) {
         ? start.left + distance * Math.hypot(1, signedCurvature * .082) / radius
         : point.left,
       right: lateral
-        ? start.right + distance * Math.hypot(1, signedCurvature * .082) / radius
+        ? start.right - distance * Math.hypot(1, signedCurvature * .082) / radius
         : point.right,
     };
   };
@@ -101,17 +102,18 @@ export function makeModeMotion(start, x, z, mode) {
         const fraction = smooth(clamp(time / steeringTime, 0, 1));
         const left = fromLeft + (targetLeft - fromLeft) * fraction;
         const right = fromRight + (targetRight - fromRight) * fraction;
-        return {...start, hipYaw: (left + right) / 2, hipYawLeft: left, hipYawRight: right,
+        return {...start, lateral, hipYaw: (left + right) / 2, hipYawLeft: left, hipYawRight: right,
           bodyPitch: (start.bodyPitch || 0) * (1 - fraction),
           bank: (start.bank || 0) * (1 - fraction),
-          crouch: (start.crouch || 0) * (1 - fraction),
-          stance: (start.stance || 0) * (1 - fraction),
+          crouch: (start.crouch || 0) * (1 - fraction) + (lateral ? .006 : 0) * fraction,
+          stance: (start.stance || 0) * (1 - fraction) + (lateral ? 1 : 0) * fraction,
           phase: lateral ? '双髋协调转向' : '髋部回正'};
       }
       const p = clamp((time - steeringTime) / arc.duration, 0, 1);
       const engagement = Math.sin(Math.PI * p) ** 2;
       const point = lateral
-        ? {...at(smooth(p)), stance: engagement, crouch: .008 * engagement}
+        ? {...at(smooth(p)), stance: 1, crouch: .006 + .003 * engagement,
+          legOffset: clamp(signedCurvature * .006, -.008, .008) * engagement}
         : arc.sample(time - steeringTime);
       return {...point, hipYaw: (targetLeft + targetRight) / 2,
         hipYawLeft: targetLeft, hipYawRight: targetRight,
@@ -143,17 +145,22 @@ export function makeRig(model, ground) {
   function solveLeg(leg, swing, bodyY, targetZ, clearance) {
     const {roll, hip, knee, wheel} = leg;
     const rollAngle = roll.rotation.z;
-    axle.copy(xAxis).applyAxisAngle(zAxis, rollAngle).applyQuaternion(body);
+    const yawAngle = leg.yaw.rotation.y;
+    axle.copy(xAxis).applyAxisAngle(zAxis, rollAngle).applyAxisAngle(yAxis, yawAngle).applyQuaternion(body);
     const support = radius * Math.sqrt(1 - axle.y ** 2) + halfWidth * Math.abs(axle.y);
     const base = leg.base;
     const upper = knee.position, lower = wheel.position;
+    const forward = zAxis.clone().applyAxisAngle(yAxis, yawAngle).applyQuaternion(body);
+    const hipCenter = base.clone();
+    hipCenter.y -= hipHeight;
+    hipCenter.applyQuaternion(body);
     function evaluate(hipAngle, kneeAngle) {
       wheelCenter.copy(lower).applyAxisAngle(xAxis, kneeAngle).add(upper)
         .applyAxisAngle(xAxis, hipAngle).add(hip.position)
-        .applyAxisAngle(zAxis, rollAngle).add(base);
+        .applyAxisAngle(zAxis, rollAngle).applyAxisAngle(yAxis, yawAngle).add(base);
       wheelCenter.y -= hipHeight;
       wheelCenter.applyQuaternion(body);
-      return [wheelCenter.y + bodyY - support - clearance, wheelCenter.z - targetZ];
+      return [wheelCenter.y + bodyY - support - clearance, wheelCenter.clone().sub(hipCenter).dot(forward) - targetZ];
     }
 
     const step = .0001;
@@ -187,13 +194,13 @@ export function makeRig(model, ground) {
     for (const leg of legs) {
       const {side, roll, hip, knee, wheel} = leg;
       leg.yaw.rotation.y = (side < 0 ? p.hipYawLeft : p.hipYawRight) ?? p.hipYaw ?? 0;
-      roll.rotation.z = p.lateral || Math.abs(p.hipYaw || 0) > .001
+      roll.rotation.z = p.lateral || Math.abs(leg.yaw.rotation.y) > .001
         ? 0 : side * .075 * stance - .64 * bank;
       if (stance < .000001) {
         hip.rotation.x = knee.rotation.x = 0;
       } else {
         // The wheel centers stay almost aligned while the torso banks into the curve.
-        const targetZ = .005 + side * (-bank) * .068;
+        const targetZ = .005 + side * (-bank) * .068 + side * (p.legOffset || 0);
         const supportError = solveLeg(leg, -bodyPitch + .22, height, targetZ, 0);
         error = Math.max(error, Math.abs(supportError));
       }
@@ -202,4 +209,5 @@ export function makeRig(model, ground) {
     return {kneeLeft: legs[0].knee.rotation.x, kneeRight: legs[1].knee.rotation.x, bank, error};
   };
 }
+
 

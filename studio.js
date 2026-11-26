@@ -2,7 +2,7 @@ import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-import { makeModeMotion, makeRig } from './motion.js?v=20261126-click2';
+import { makeModeMotion, makeRig } from './motion.js?v=20261126-knees3';
 
 const $ = (id) => document.getElementById(id);
 const host = $('scene'), status = $('status');
