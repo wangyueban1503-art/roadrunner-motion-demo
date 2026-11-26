@@ -32,3 +32,9 @@
 - [Ascento 全身控制研究](https://www.research-collection.ethz.ch/server/api/core/bitstreams/c0497fd4-e406-40d8-a1a2-49e556f96433/content)
 
 本项目与 RAI Institute 无隶属关系。Third-party Three.js code retains its original MIT license in vendor/LICENSE.
+
+## 横向滑行模式
+
+选择「髋部旋转 · 横向滑行」后，网页自动演示转髋及横滑。两条腿的演示旋转轴在髋部连接点转动 90°，机身保持朝向，沿机身横向滚动。点击目标时，目标会投影到这条横向轴线上。切回常规模式，髋部先回正，再行驶。横滑动作已检查左右方向、轮地高度、转髋先于位移和机身朝向保持。
+
+该版本新增的是网页运行时的运动学关节。原型真实髋关节轴系与限位尚待确认，此动作采用视觉近似，当前验证覆盖网页动画。

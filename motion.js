@@ -1,4 +1,4 @@
-import { Euler, Quaternion, Vector3 } from 'three';
+import { Euler, Group, Quaternion, Vector3 } from 'three';
 
 const radius = .05;
 const halfWidth = .009;
@@ -55,13 +55,71 @@ export function makeArc(start, x, z) {
   };
 }
 
+export function makeModeMotion(start, x, z, mode) {
+  const lateral = mode === 'lateral';
+  const targetYaw = lateral ? Math.PI / 2 : 0;
+  const fromYaw = start.hipYaw || 0;
+  const steeringTime = Math.abs(targetYaw - fromYaw) > .001 ? 1.4 : 0;
+  let travel;
+  if (lateral) {
+    const rightX = Math.cos(start.yaw), rightZ = -Math.sin(start.yaw);
+    const distance = (x - start.x) * rightX + (z - start.z) * rightZ;
+    if (Math.abs(distance) < .004 && !steeringTime) return null;
+    const duration = Math.max(1.4, Math.abs(distance) / .22);
+    const at = fraction => ({
+      x: start.x + rightX * distance * fraction,
+      z: start.z + rightZ * distance * fraction,
+      yaw: start.yaw,
+      left: start.left + distance * fraction / radius,
+      right: start.right + distance * fraction / radius,
+    });
+    travel = {
+      duration, direction: Math.sign(distance), at,
+      sample(time) {
+        const p = clamp(time / duration, 0, 1);
+        const engagement = Math.sin(Math.PI * p) ** 2;
+        return {...at(smooth(p)), stance: engagement, crouch: .008 * engagement};
+      },
+    };
+  } else {
+    travel = makeArc(start, x, z);
+    if (!travel) return null;
+  }
+  return {
+    duration: steeringTime + travel.duration,
+    direction: travel.direction,
+    at: travel.at,
+    sample(time) {
+      if (time < steeringTime) {
+        const p = smooth(clamp(time / steeringTime, 0, 1));
+        return {...start, hipYaw: fromYaw + (targetYaw - fromYaw) * p,
+          bodyPitch: (start.bodyPitch || 0) * (1 - p),
+          bank: (start.bank || 0) * (1 - p),
+          crouch: (start.crouch || 0) * (1 - p),
+          stance: (start.stance || 0) * (1 - p),
+          phase: lateral ? '髋部转向横滑姿态' : '髋部回正'};
+      }
+      return {...travel.sample(time - steeringTime), hipYaw: targetYaw,
+        lateral, phase: lateral ? '正在横向滑行' : '正在滚动'};
+    },
+  };
+}
+
 export function makeRig(model, ground) {
   const legs = ['L', 'R'].map((side, index) => {
     const roll = model.getObjectByName(side + '_Hip_roll');
     const hip = model.getObjectByName(side + '_Hip_pitch');
     const knee = model.getObjectByName(side + '_Knee_pitch');
     const wheel = model.getObjectByName(side + '_Wheel_spin');
-    return {roll, hip, knee, wheel, side: index === 0 ? -1 : 1};
+    // Add a visual yaw pivot at the existing hip attachment.
+    const base = roll.position.clone();
+    const yaw = new Group();
+    yaw.name = side + '_Hip_yaw_demo';
+    yaw.position.copy(base);
+    roll.parent.add(yaw);
+    yaw.add(roll);
+    roll.position.set(0, 0, 0);
+    return {roll, hip, knee, wheel, yaw, base, side: index === 0 ? -1 : 1};
   });
   const neutralHeight = hipHeight - ground;
   const body = new Quaternion(), orientation = new Euler();
@@ -72,7 +130,7 @@ export function makeRig(model, ground) {
     const rollAngle = roll.rotation.z;
     axle.copy(xAxis).applyAxisAngle(zAxis, rollAngle).applyQuaternion(body);
     const support = radius * Math.sqrt(1 - axle.y ** 2) + halfWidth * Math.abs(axle.y);
-    const base = roll.position;
+    const base = leg.base;
     const upper = knee.position, lower = wheel.position;
     function evaluate(hipAngle, kneeAngle) {
       wheelCenter.copy(lower).applyAxisAngle(xAxis, kneeAngle).add(upper)
@@ -113,7 +171,9 @@ export function makeRig(model, ground) {
     let error = 0;
     for (const leg of legs) {
       const {side, roll, hip, knee, wheel} = leg;
-      roll.rotation.z = side * .075 * stance - .64 * bank;
+      leg.yaw.rotation.y = p.hipYaw || 0;
+      roll.rotation.z = p.lateral || Math.abs(p.hipYaw || 0) > .001
+        ? 0 : side * .075 * stance - .64 * bank;
       if (stance < .000001) {
         hip.rotation.x = knee.rotation.x = 0;
       } else {

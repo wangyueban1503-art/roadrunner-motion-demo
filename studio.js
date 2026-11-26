@@ -2,12 +2,12 @@ import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-import { makeArc, makeRig } from './motion.js';
+import { makeModeMotion, makeRig } from './motion.js';
 
 const $ = (id) => document.getElementById(id);
 const host = $('scene'), status = $('status');
 const LIMIT = 1.35;
-const zero = () => ({x:0,z:0,yaw:0,left:0,right:0});
+const zero = () => ({x:0,z:0,yaw:0,left:0,right:0,hipYaw:0});
 const clamp = (v,a,b) => Math.min(b, Math.max(a,v));
 const angle = (v) => Math.atan2(Math.sin(v),Math.cos(v));
 const deg = (v) => (v*180/Math.PI).toFixed(0)+'°';
@@ -40,6 +40,7 @@ function update(p,time,length,label){
   const joints = poseRig(posture,p);
   $('knees').textContent = deg(joints.kneeLeft)+' / '+deg(joints.kneeRight);
   $('bank').textContent = deg(joints.bank);
+  $('hip-yaw').textContent = deg(p.hipYaw || 0);
   $('pos').textContent=position(p.x,p.z);
   $('yaw').textContent=deg(angle(p.yaw));
   $('wheels').textContent=deg(p.left)+' / '+deg(p.right);
@@ -54,7 +55,7 @@ function sample(t){
   if(!motion) return;
   const {duration, direction} = motion;
   const label = t >= duration ? '已到达目标' : !playing ? '已暂停' :
-    direction < 0 ? '正在倒车入弯' : '正在滚动';
+    motion.sample(t).phase;
   update(motion.sample(t), t, duration, label);
 }
 function tick(now){
@@ -80,12 +81,15 @@ function plan(x,z){
   if(!robot)return;
   x=clamp(x,-LIMIT,LIMIT); z=clamp(z,-LIMIT,LIMIT);
   $('x').value=x.toFixed(2); $('z').value=z.toFixed(2);
-  const next = makeArc(pose, x, z);
+  const next = makeModeMotion(pose, x, z, $('mode').value);
   if (!next) return;
   stop();
   motion = next;
   marker.visible = route.visible = true;
-  marker.position.set(x, .005, z);
+  const end = next.at(1);
+  $('x').value = end.x.toFixed(2);
+  $('z').value = end.z.toFixed(2);
+  marker.position.set(end.x, .005, end.z);
   const vertices = route.geometry.getAttribute('position');
   for (let i = 0; i < vertices.count; i++) {
     const point = next.at(i / (vertices.count - 1));
@@ -183,3 +187,13 @@ $('view').addEventListener('click',()=>{if(controls)setView();});
 $('play').addEventListener('click',()=>{if(playing){stop();sample(elapsed);}else play();});
 $('time').addEventListener('input',()=>{if(!motion)return;const v=Number($('time').value);stop();elapsed=v*motion.duration;sample(elapsed);});
 
+
+$('mode').addEventListener('change', () => {
+  if (!robot) return;
+  stop();
+  const lateral = $('mode').value === 'lateral';
+  const dx = lateral ? Math.cos(pose.yaw) : Math.sin(pose.yaw);
+  const dz = lateral ? -Math.sin(pose.yaw) : Math.cos(pose.yaw);
+  const sign = Math.abs(pose.x + dx * .55) > LIMIT || Math.abs(pose.z + dz * .55) > LIMIT ? -1 : 1;
+  plan(pose.x + sign * dx * .55, pose.z + sign * dz * .55);
+});
